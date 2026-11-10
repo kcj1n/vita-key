@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>VITA 키 입력</title>
+<!--
+  VITA watch app: hands the user's Gemini API key from the phone to the watch.
+  The watch opens this page on the phone as  key.html?t=<topic>#<secret>
+   - topic : one-time ntfy.sh topic the watch is listening on
+   - secret: AES-256 key (base64url). After "#", so it never leaves the phone.
+  The API key is encrypted here (AES-GCM) and sent through ntfy.sh without being stored
+  (cache=no); the watch decrypts it, checks it with Gemini, and answers on <topic>r.
+-->
+<style>
+  :root { --bg: #10131a; --card: #1b2029; --text: #f5f5dc; --sub: #9497a3; --teal: #00a3a8; --red: #ff6b6b; --green: #5bd982; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.5 system-ui, -apple-system, "Noto Sans KR", sans-serif; }
+  main { max-width: 480px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 26px; margin: 8px 0 4px; }
+  p.lead { color: var(--sub); margin: 0 0 20px; }
+  .step { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  .step b.n { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; background: var(--teal); color: #fff; margin-right: 8px; font-size: 16px; }
+  a { color: #9cc8ff; }
+  textarea { width: 100%; min-height: 84px; margin-top: 10px; padding: 12px; border-radius: 12px; border: 1px solid #3a4150; background: #0c0f14; color: var(--text); font: 17px/1.4 ui-monospace, monospace; word-break: break-all; resize: vertical; }
+  .row { display: flex; gap: 10px; margin-top: 10px; }
+  button { flex: 1; padding: 14px; border: 0; border-radius: 12px; font-size: 18px; font-weight: 700; cursor: pointer; }
+  button.main { background: var(--teal); color: #fff; }
+  button.sub { background: #2d333f; color: var(--text); }
+  button:disabled { opacity: .5; }
+  #status { margin-top: 16px; padding: 14px; border-radius: 12px; display: none; font-weight: 700; text-align: center; }
+  #status.info { display: block; background: #23303a; }
+  #status.ok { display: block; background: #1f3a2a; color: var(--green); }
+  #status.err { display: block; background: #3a2323; color: var(--red); }
+  details { margin-top: 18px; color: var(--sub); }
+</style>
+</head>
+<body>
+<main>
+  <h1>VITA AI 비서 키 입력</h1>
+  <p class="lead">시계의 AI 비서에 쓸 Gemini API 키를 이 휴대폰에서 보냅니다.</p>
+
+  <div class="step">
+    <b class="n">1</b>키가 없다면 아래 링크에서 만들고 <b>복사</b>하세요.<br>
+    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio에서 API 키 만들기 ↗</a>
+  </div>
+
+  <div class="step">
+    <b class="n">2</b>키를 아래 칸에 붙여넣으세요.
+    <textarea id="key" placeholder="AIza로 시작하는 키" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    <div class="row">
+      <button class="sub" id="paste" type="button">붙여넣기</button>
+    </div>
+  </div>
+
+  <div class="step">
+    <b class="n">3</b>시계의 VITA 앱을 켠 채로 <b>보내기</b>를 누르세요.
+    <div class="row">
+      <button class="main" id="send" type="button">보내기</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <details>
+    <summary>키 지우기 / 안전 안내</summary>
+    <p>시계에 저장된 키를 지우려면 아래 버튼을 누르세요.</p>
+    <div class="row"><button class="sub" id="clear" type="button">시계의 키 지우기</button></div>
+    <p>키는 이 휴대폰에서 암호화된 뒤 시계로 전달되며, 중계 서버에는 저장되지 않습니다. 이 페이지 주소는 한 번만 쓸 수 있습니다.</p>
+  </details>
+</main>
+
+<script>
+(() => {
+  const RELAY = "https://ntfy.sh/";
+  const params = new URLSearchParams(location.search);
+  const topic = params.get("t") || "";
+  const secretB64 = location.hash.slice(1);
+  const $ = (id) => document.getElementById(id);
+  const statusBox = $("status");
+
+  function status(kind, text) {
+    statusBox.className = kind;
+    statusBox.textContent = text;
+  }
+
+  function b64urlToBytes(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  }
+
+  function bytesToB64(bytes) {
+    let s = "";
+    bytes.forEach((b) => (s += String.fromCharCode(b)));
+    return btoa(s);
+  }
+
+  const valid = /^[A-Za-z0-9_-]{16,64}$/.test(topic) && secretB64.length >= 40 && window.crypto && crypto.subtle;
+  if (!valid) {
+    status("err", "시계의 열쇠 버튼을 눌러 이 페이지를 다시 열어 주세요.");
+    $("send").disabled = true;
+    $("clear").disabled = true;
+    $("paste").disabled = true;
+    return;
+  }
+
+  // The watch's answers: "ok", "bad" (key doesn't work), "cleared".
+  let waiting = null;
+  const answers = new EventSource(RELAY + topic + "r/sse");
+  answers.onmessage = (e) => {
+    let msg = "";
+    try { msg = JSON.parse(e.data).message || ""; } catch (_) {}
+    clearTimeout(waiting);
+    $("send").disabled = false;
+    if (msg === "ok") {
+      status("ok", "시계에 저장되었습니다 ✓  시계에서 AI 비서를 사용하세요.");
+      $("key").value = "";
+    } else if (msg === "cleared") {
+      status("ok", "시계의 키를 지웠습니다.");
+    } else if (msg === "bad") {
+      status("err", "키가 맞지 않습니다. 복사한 키를 확인하고 다시 보내 주세요.");
+    }
+  };
+
+  async function encrypt(text) {
+    const key = await crypto.subtle.importKey("raw", b64urlToBytes(secretB64), "AES-GCM", false, ["encrypt"]);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(text)));
+    const out = new Uint8Array(iv.length + ct.length);
+    out.set(iv);
+    out.set(ct, iv.length);
+    return bytesToB64(out);
+  }
+
+  async function send(text) {
+    $("send").disabled = true;
+    status("info", "시계로 보내는 중...");
+    try {
+      const body = await encrypt(text);
+      // cache=no: the relay passes it on to the watch without keeping it.
+      const r = await fetch(RELAY + topic + "?cache=no", { method: "POST", body });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      status("info", "보냈습니다. 시계가 확인하는 중...");
+      waiting = setTimeout(() => {
+        $("send").disabled = false;
+        status("err", "시계의 응답이 없습니다. 시계에서 열쇠 버튼을 다시 누른 뒤 보내 주세요.");
+      }, 20000);
+    } catch (e) {
+      $("send").disabled = false;
+      status("err", "보내지 못했습니다. 인터넷 연결을 확인해 주세요. (" + e.message + ")");
+    }
+  }
+
+  $("paste").onclick = async () => {
+    try {
+      $("key").value = (await navigator.clipboard.readText()).trim();
+    } catch (_) {
+      $("key").focus();
+      status("info", "칸을 길게 눌러 [붙여넣기]를 선택하세요.");
+    }
+  };
+
+  $("send").onclick = () => {
+    const key = $("key").value.replace(/\s+/g, "");
+    if (key.length < 30) {
+      status("err", "키가 너무 짧습니다. 전체를 복사해 붙여넣어 주세요.");
+      return;
+    }
+    send(key);
+  };
+
+  $("clear").onclick = () => send("__clear__");
+})();
+</script>
+</body>
+</html>
