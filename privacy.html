@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VITA 개인정보처리방침</title>
+<style>
+  :root { --bg: #ffffff; --text: #1d2129; --sub: #5b6270; --line: #e3e6ec; --accent: #00777b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #10131a; --text: #eceef2; --sub: #9497a3; --line: #262b35; --accent: #00c2c7; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.7 system-ui, -apple-system, "Noto Sans KR", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  p.meta { color: var(--sub); margin: 0 0 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--sub); font-weight: 600; white-space: nowrap; }
+  a { color: var(--accent); }
+  ul { padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>VITA 개인정보처리방침</h1>
+  <p class="meta">시행일: 2026년 11월 10일</p>
+
+  <p>VITA(이하 "앱")는 Wear OS 스마트워치용 앱으로, 음악·라디오 재생, 성경 읽기, AI 비서 기능을 제공합니다.
+  앱 개발자는 별도의 서버를 운영하지 않으며, <b>사용자의 개인정보를 수집·저장하지 않습니다.</b>
+  이 방침은 앱이 기능을 제공하기 위해 어떤 정보를 어디로 보내는지 설명합니다.</p>
+
+  <h2>1. 기능별 정보 처리</h2>
+  <table>
+    <tr><th>기능</th><td>처리하는 정보와 전송 대상</td></tr>
+    <tr><th>AI 비서 (기본)</th><td>시계에 내장된 Google Gemini를 열어 줍니다. 이때 앱은 음성을 녹음하거나 전송하지 않으며, 질문과 답변은 Google Gemini가 처리합니다(<a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google 개인정보처리방침</a>).</td></tr>
+    <tr><th>AI 비서 (API 키 사용)</th><td>사용자가 자신의 Gemini API 키를 넣은 경우, 녹음 버튼을 누른 동안의 <b>음성</b>을 Google Gemini API로 보내 답변을 받습니다. 녹음 파일은 답변을 받은 뒤 시계에서 바로 삭제됩니다. 음성은 해당 API 키의 Google 계정 약관에 따라 Google이 처리합니다(<a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener">Gemini API 약관</a>).</td></tr>
+    <tr><th>API 키 입력</th><td>휴대폰 웹페이지에서 입력한 API 키는 휴대폰에서 <b>암호화</b>된 뒤 중계 서비스(ntfy.sh)를 거쳐 시계로 전달됩니다. 중계 서비스는 암호를 풀 수 없고, 메시지를 저장하지 않도록 설정되어 있습니다. 키는 시계 안에만 저장됩니다.</td></tr>
+    <tr><th>라디오</th><td>선택한 방송사 서버에서 방송을 직접 받아 재생합니다. 방송사는 일반적인 인터넷 접속과 같이 접속 IP 등을 기록할 수 있습니다.</td></tr>
+    <tr><th>음악</th><td>WiFi에 연결되면 개발자가 GitHub에 올려 둔 음악 파일을 시계로 내려받아 재생합니다. 내려받을 때 사용자 정보는 보내지 않으며(GitHub는 일반적인 인터넷 접속과 같이 접속 IP 등을 기록할 수 있습니다), 재생 기록을 외부로 보내지 않습니다.</td></tr>
+    <tr><th>휴대폰에서 노래 보내기</th><td>사용자가 직접 켠 동안에만, 같은 WiFi 안에서 휴대폰이 고른 mp3 파일을 시계로 바로 받습니다. 파일은 인터넷이나 다른 서버를 거치지 않고 시계에만 저장됩니다.</td></tr>
+    <tr><th>성경</th><td>앱에 들어 있는 본문(성경전서 개역한글판 © 대한성서공회, 영어: King James Version)을 보여 주며, 외부로 정보를 보내지 않습니다.</td></tr>
+    <tr><th>앱 설정</th><td>볼륨, 밝기, 마지막 곡, AI 모델 선택, 하루 질문 횟수 등은 시계 안에만 저장됩니다.</td></tr>
+  </table>
+
+  <h2>2. 권한</h2>
+  <ul>
+    <li><b>마이크</b>: API 키를 사용하는 AI 비서에서 질문을 녹음할 때만 사용합니다.</li>
+    <li><b>오디오 파일 읽기</b>: 시계의 음악 폴더에 있는 파일을 재생하기 위해 사용합니다.</li>
+    <li><b>알림</b>: 재생 중임을 시계 화면에 표시하기 위해 사용합니다.</li>
+    <li><b>인터넷</b>: 라디오, AI 비서, API 키 전달에 사용합니다.</li>
+  </ul>
+
+  <h2>3. 수집하지 않는 정보</h2>
+  <p>앱은 광고, 사용 통계 분석, 위치 추적 기능이 없으며, 이름·연락처·계정 정보 등 개인을 식별할 수 있는 정보를 개발자에게 보내지 않습니다.</p>
+
+  <h2>4. 정보 삭제</h2>
+  <ul>
+    <li>시계에 저장된 API 키는 키 입력 페이지의 <b>[시계의 키 지우기]</b>로 지울 수 있습니다.</li>
+    <li>앱을 삭제하면 시계에 저장된 설정과 API 키가 모두 삭제됩니다.</li>
+  </ul>
+
+  <h2>5. 아동</h2>
+  <p>앱은 만 14세 미만 아동을 대상으로 하지 않습니다.</p>
+
+  <h2>6. 방침의 변경</h2>
+  <p>이 방침이 바뀌면 이 페이지에 변경 내용과 시행일을 게시합니다.</p>
+
+  <h2>7. 문의</h2>
+  <p>개인정보 관련 문의: <span id="contact">kcjin000@gmail.com</span></p>
+</main>
+</body>
+</html>
