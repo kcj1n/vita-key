@@ -174,10 +174,12 @@ save.addEventListener("click", async () => {
     const blob = await ID3.build(file, p);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = file.name;                            // same name: replaces nothing, saved as a new download
+    // a.mp3 -> a_track.mp3 (an mp3 that already ends in _track keeps its name)
+    const out = file.name.replace(/(_track)?\.mp3$/i, "_track.mp3");
+    a.download = out;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-    show("저장했어요 (곡 " + p.songs.length + "개). 다운로드 폴더의 " + file.name + " 를 시계로 보내 주세요.", false);
+    show("저장했어요 (곡 " + p.songs.length + "개). 다운로드 폴더의 " + out + " 를 시계로 보내 주세요.", false);
   } catch (e) {
     show("만들지 못했어요: " + e, true);
   }
