@@ -14,7 +14,11 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.6 system-ui, -apple-system, "Noto Sans KR", sans-serif; }
   main { max-width: 560px; margin: 0 auto; padding: 28px 16px 48px; }
-  h1 { font-size: 26px; margin: 0 0 6px; }
+  .top { display: flex; align-items: center; gap: 4px; margin: 0 0 8px -10px; }
+  h1 { font-size: 20px; margin: 0; }
+  #back { flex: none; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%;
+          background: transparent; color: var(--text); cursor: pointer; }
+  #back svg { width: 24px; height: 24px; }
   p { margin: 0 0 18px; color: var(--sub); }
   .btn { display: block; width: 100%; text-align: center; background: var(--teal); color: #fff; font: inherit; font-size: 18px; font-weight: 700;
          padding: 18px; border: 0; border-radius: 16px; cursor: pointer; }
@@ -35,7 +39,10 @@
 </head>
 <body>
 <main>
-  <h1>mp3에 곡 목록 넣기</h1>
+  <div class="top">
+    <button id="back" aria-label="이전" title="이전"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H5M11 5l-7 7 7 7"/></svg></button>
+    <h1>mp3에 곡 목록 넣기</h1>
+  </div>
   <p>여러 곡이 든 mp3에 <b>곡 목록</b>을 넣어 <b>파일 하나</b>로 저장해요.
   VITA 시계로 보내면 시간에 맞춰 곡 제목이 나와요. 다른 음악 앱에서도 그대로 재생돼요.
   파일은 인터넷으로 올라가지 않고 이 휴대폰(PC) 안에서만 만들어져요.</p>
@@ -209,6 +216,8 @@ const ID3 = (() => {
 const box = document.getElementById("box"), found = document.getElementById("found");
 const save = document.getElementById("save"), msg = document.getElementById("msg"), nameEl = document.getElementById("name");
 let file = null;
+// back: the page before; opened in its own tab (from the send page) - that tab closes
+document.getElementById("back").onclick = () => { if (history.length > 1) history.back(); else window.close(); };
 // a teal music note before the mp3's name
 const NOTE = '<svg class="note" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>';
 
