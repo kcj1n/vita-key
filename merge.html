@@ -68,7 +68,8 @@ const ID3 = (() => {
       let m = /^mp3\s*:\s*(.+)$/i.exec(line); if (m) { title = m[1].trim(); continue; }
       m = /^url\s*:\s*(\S+)/i.exec(line); if (m) { url = m[1]; continue; }
       if (/^track\s*:/i.test(line)) continue;
-      m = /^(?:\d{1,3}[.)]\s*)?\[?(\d{1,2}):(\d{2})(?::(\d{2}))?\]?\s*[-–—|:.]*\s*(.+)$/.exec(line);
+      // time first; "0:5" (one-digit seconds) is read as 00:00:05
+      m = /^(?:\d{1,3}[.)]\s*)?\[?(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\]?\s*[-–—|:.]*\s*(.+)$/.exec(line);
       let h, mi, s, name;
       if (m) { name = m[4]; if (m[3] !== undefined) { h = +m[1]; mi = +m[2]; s = +m[3]; } else { h = 0; mi = +m[1]; s = +m[2]; } }
       else {
@@ -143,20 +144,25 @@ const ID3 = (() => {
     return p < b.length ? new TextDecoder("latin1").decode(b.subarray(p)).split("\0")[0].trim() : "";
   }
 
-  const clock = ms => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), two = n => String(n).padStart(2, "0");
-                        return (h ? h + ":" : "") + two(Math.floor(s / 60) % 60) + ":" + two(s % 60); };
+  // Always hh:mm:ss (00:00:02), the same as the watch's song list file.
+  const clock = ms => { const s = Math.floor(ms / 1000), two = n => String(n).padStart(2, "0");
+                        return two(Math.floor(s / 3600)) + ":" + two(Math.floor(s / 60) % 60) + ":" + two(s % 60); };
+
+  // A parsed list written back out in one neat form.
+  function format(list) {
+    const lines = [];
+    if (list.title) lines.push("MP3: " + list.title);
+    if (list.url) { let u = list.url; try { u = decodeURI(u); } catch (e) {} lines.push("URL: " + u); }
+    for (const s of list.songs) lines.push(clock(s.ms) + " " + s.name);
+    return lines.join("\n");
+  }
 
   // The song list already inside the mp3, in the same form as a pasted one ("" when it has none).
   async function listText(file) {
     const t = await oldTag(file);
     if (!t.chaps.length) return "";
-    const lines = [];
     const ti = t.frames.find(f => f.id === "TIT2"), w = t.frames.find(f => f.id === "WXXX");
-    const title = ti ? readText(ti.body) : "", url = w ? readUrl(w.body) : "";
-    if (title) lines.push("MP3: " + title);
-    if (url) { let u = url; try { u = decodeURI(url); } catch (e) {} lines.push("URL: " + u); }
-    for (const c of t.chaps) lines.push(clock(c.ms) + " " + c.name);
-    return lines.join("\n");
+    return format({ title: ti ? readText(ti.body) : "", url: w ? readUrl(w.body) : "", songs: t.chaps });
   }
 
   function duration(file) {
@@ -193,7 +199,7 @@ const ID3 = (() => {
     return new Blob([head, body, file.slice(old.end)], { type: "audio/mpeg" });
   }
 
-  return { parse, build, listText };
+  return { parse, build, listText, format };
 })();
 
 const box = document.getElementById("box"), found = document.getElementById("found");
@@ -227,6 +233,7 @@ save.addEventListener("click", async () => {
   try {
     const p = ID3.parse(box.value);
     const blob = await ID3.build(file, p);
+    box.value = ID3.format(p);                         // shown as saved: 00:00:05 곡
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     // a.mp3 -> a_track.mp3 (an mp3 that already ends in _track keeps its name)
