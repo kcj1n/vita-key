@@ -35,7 +35,7 @@
   <p>여러 곡이 든 mp3에 <b>곡 목록</b>을 넣어 <b>파일 하나</b>로 저장해요.
   VITA 시계로 보내면 시간에 맞춰 곡 제목이 나와요. 다른 음악 앱에서도 그대로 재생돼요.
   파일은 인터넷으로 올라가지 않고 이 휴대폰(PC) 안에서만 만들어져요.</p>
-  <label class="btn">🎵 mp3 고르기<input id="file" type="file"></label>
+  <label class="btn">🎵 mp3 고르기<input id="file" type="file" accept=".mp3,audio/mpeg"></label>
   <div id="name"></div>
   <textarea id="box" placeholder="곡 목록 붙여넣기&#10;00:00 첫 번째 곡&#10;04:12 두 번째 곡&#10;1:02:30 세 번째 곡&#10;&#10;(첫 줄에 MP3: 전체 제목, URL: 출처 주소도 넣을 수 있어요)"></textarea>
   <div id="found"></div>
@@ -86,26 +86,77 @@ const ID3 = (() => {
   // The tag at the start of the file: where the sound starts, and its frames to keep.
   async function oldTag(file) {
     const head = new Uint8Array(await file.slice(0, 10).arrayBuffer());
-    if (head.length < 10 || head[0] !== 73 || head[1] !== 68 || head[2] !== 51) return { end: 0, frames: [] };
+    if (head.length < 10 || head[0] !== 73 || head[1] !== 68 || head[2] !== 51) return { end: 0, frames: [], chaps: [] };
     const ver = head[3], flags = head[5];
     const size = (head[6] & 127) << 21 | (head[7] & 127) << 14 | (head[8] & 127) << 7 | (head[9] & 127);
     const end = 10 + size + (ver === 4 && flags & 0x10 ? 10 : 0);
-    const frames = [];
-    if ((ver !== 3 && ver !== 4) || flags & 0x80) return { end, frames };           // old / unsynchronised: dropped
+    const frames = [], chaps = [];
+    if ((ver !== 3 && ver !== 4) || flags & 0x80) return { end, frames, chaps };    // old / unsynchronised: dropped
     const b = new Uint8Array(await file.slice(10, 10 + size).arrayBuffer());
     let p = 0;
     if (flags & 0x40) p = ver === 4 ? ((b[0] & 127) << 21 | (b[1] & 127) << 14 | (b[2] & 127) << 7 | (b[3] & 127)) : ((b[0] << 24 | b[1] << 16 | b[2] << 8 | b[3]) + 4);
-    while (p + 10 <= b.length && b[p] !== 0) {
+    eachFrame(b, p, b.length, ver, (id, body, packed) => {
+      if (packed) return;
+      if (id === "CHAP") { const c = chapter(body, ver); if (c) chaps.push(c); }
+      else if (id !== "CTOC") frames.push({ id, body });
+    });
+    chaps.sort((a, c) => a.ms - c.ms);
+    return { end, frames, chaps };
+  }
+
+  function eachFrame(b, p, to, ver, f) {
+    while (p + 10 <= to && b[p] !== 0) {
       const id = String.fromCharCode(b[p], b[p + 1], b[p + 2], b[p + 3]);
       const n = ver === 4 ? ((b[p + 4] & 127) << 21 | (b[p + 5] & 127) << 14 | (b[p + 6] & 127) << 7 | (b[p + 7] & 127))
                           : (b[p + 4] << 24 | b[p + 5] << 16 | b[p + 6] << 8 | b[p + 7]) >>> 0;
       const f2 = b[p + 9];
-      if (n <= 0 || p + 10 + n > b.length) break;
-      const packed = ver === 4 ? (f2 & 0x0F) : (f2 & 0xE0);                           // compressed / encrypted / unsynchronised / length prefix
-      if (!packed && !/^(CHAP|CTOC)$/.test(id)) frames.push({ id, body: b.subarray(p + 10, p + 10 + n) });
+      if (n <= 0 || p + 10 + n > to) break;
+      f(id, b.subarray(p + 10, p + 10 + n), ver === 4 ? (f2 & 0x0F) : (f2 & 0xE0)); // compressed / encrypted / unsynchronised / length prefix
       p += 10 + n;
     }
-    return { end, frames };
+  }
+
+  // CHAP: id (ends with 0), start ms, end ms, byte offsets, then its own frames (TIT2 = song name).
+  function chapter(b, ver) {
+    let p = b.indexOf(0) + 1;
+    if (p <= 0 || p + 16 > b.length) return null;
+    const ms = (b[p] << 24 | b[p + 1] << 16 | b[p + 2] << 8 | b[p + 3]) >>> 0;
+    let name = "";
+    eachFrame(b, p + 16, b.length, ver, (id, body) => { if (id === "TIT2") name = readText(body); });
+    return name ? { ms, name } : null;
+  }
+
+  // A text frame: encoding byte (0 Latin-1, 1 UTF-16 + BOM, 2 UTF-16BE, 3 UTF-8), then the text.
+  function readText(b) {
+    if (!b.length) return "";
+    let d = b.subarray(1), label = ["latin1", "utf-16le", "utf-16be", "utf-8"][b[0]] || "latin1";
+    if (b[0] === 1 && d[0] === 0xFE && d[1] === 0xFF) { label = "utf-16be"; d = d.subarray(2); }
+    else if (b[0] === 1 && d[0] === 0xFF && d[1] === 0xFE) d = d.subarray(2);
+    return new TextDecoder(label).decode(d).split("\0")[0].trim();
+  }
+
+  // WXXX: encoding, description (ends with 0, or 00 00 in UTF-16), then the address in Latin-1.
+  function readUrl(b) {
+    let p = 1;
+    if (b[0] === 1 || b[0] === 2) { while (p + 1 < b.length && (b[p] || b[p + 1])) p += 2; p += 2; }
+    else { while (p < b.length && b[p]) p++; p++; }
+    return p < b.length ? new TextDecoder("latin1").decode(b.subarray(p)).split("\0")[0].trim() : "";
+  }
+
+  const clock = ms => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), two = n => String(n).padStart(2, "0");
+                        return (h ? h + ":" : "") + two(Math.floor(s / 60) % 60) + ":" + two(s % 60); };
+
+  // The song list already inside the mp3, in the same form as a pasted one ("" when it has none).
+  async function listText(file) {
+    const t = await oldTag(file);
+    if (!t.chaps.length) return "";
+    const lines = [];
+    const ti = t.frames.find(f => f.id === "TIT2"), w = t.frames.find(f => f.id === "WXXX");
+    const title = ti ? readText(ti.body) : "", url = w ? readUrl(w.body) : "";
+    if (title) lines.push("MP3: " + title);
+    if (url) { let u = url; try { u = decodeURI(url); } catch (e) {} lines.push("URL: " + u); }
+    for (const c of t.chaps) lines.push(clock(c.ms) + " " + c.name);
+    return lines.join("\n");
   }
 
   function duration(file) {
@@ -142,7 +193,7 @@ const ID3 = (() => {
     return new Blob([head, body, file.slice(old.end)], { type: "audio/mpeg" });
   }
 
-  return { parse, build };
+  return { parse, build, listText };
 })();
 
 const box = document.getElementById("box"), found = document.getElementById("found");
@@ -164,7 +215,11 @@ document.getElementById("file").addEventListener("change", e => {
   if (!/\.mp3$/i.test(f.name)) { file = null; nameEl.textContent = ""; show("mp3 파일을 골라 주세요", true); update(); return; }
   file = f;
   nameEl.textContent = "🎵 " + f.name;
-  update();
+  // a list already inside the mp3: put in the box so it can be fixed
+  ID3.listText(f).catch(() => "").then(t => {
+    if (t) { box.value = t; show("이 mp3에 들어 있던 곡 목록을 불러왔어요. 고친 뒤 저장하세요.", false); }
+    update();
+  });
 });
 
 save.addEventListener("click", async () => {
