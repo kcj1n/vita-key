@@ -7,9 +7,9 @@
 <!-- Puts a song list into an mp3 as ID3 chapters, all inside the browser (nothing is uploaded),
      and saves the new mp3. The ID3 part is copied from app/src/main/assets/web/send.html. -->
 <style>
-  :root { --bg: #ffffff; --text: #1d2129; --sub: #5b6270; --line: #e3e6ec; --teal: #008B8F; --ok: #1a7f37; --bad: #c62828; --bar: #e8ecf1; --field: #f6f7f9; }
+  :root { --bg: #ffffff; --text: #1d2129; --sub: #5b6270; --line: #e3e6ec; --teal: #4a5160; --ok: #1a7f37; --bad: #c62828; --bar: #e8ecf1; --field: #f6f7f9; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #10131a; --text: #eceef2; --sub: #9aa0ab; --line: #262b35; --teal: #2fb8bc; --ok: #4cc26a; --bad: #ff7a7a; --bar: #232833; --field: #181c24; }
+    :root { --bg: #10131a; --text: #eceef2; --sub: #9aa0ab; --line: #262b35; --teal: #a3abb9; --ok: #4cc26a; --bad: #ff7a7a; --bar: #232833; --field: #181c24; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.6 system-ui, -apple-system, "Noto Sans KR", sans-serif; }
@@ -19,6 +19,8 @@
   .btn { display: block; width: 100%; text-align: center; background: var(--teal); color: #fff; font: inherit; font-size: 22px; font-weight: 700;
          padding: 18px; border: 0; border-radius: 16px; cursor: pointer; }
   .btn:disabled { opacity: .45; }
+  .btn { background: #343a46; }                      /* a calm charcoal, as on the watch's send page */
+  @media (prefers-color-scheme: dark) { .btn { background: #3c4454; } }
   input[type=file] { display: none; }
   #name { margin: 14px 0 6px; font-weight: 600; word-break: break-all; }
   textarea { width: 100%; min-height: 200px; padding: 10px; border: 1px solid var(--line); border-radius: 10px;
