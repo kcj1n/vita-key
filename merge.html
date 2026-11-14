@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VITA 곡 목록 넣기</title>
+<!-- Puts a song list into an mp3 as ID3 chapters, all inside the browser (nothing is uploaded),
+     and saves the new mp3. The ID3 part is copied from app/src/main/assets/web/send.html. -->
+<style>
+  :root { --bg: #ffffff; --text: #1d2129; --sub: #5b6270; --line: #e3e6ec; --teal: #008B8F; --ok: #1a7f37; --bad: #c62828; --bar: #e8ecf1; --field: #f6f7f9; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #10131a; --text: #eceef2; --sub: #9aa0ab; --line: #262b35; --teal: #2fb8bc; --ok: #4cc26a; --bad: #ff7a7a; --bar: #232833; --field: #181c24; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.6 system-ui, -apple-system, "Noto Sans KR", sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 28px 16px 48px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  p { margin: 0 0 18px; color: var(--sub); }
+  .btn { display: block; width: 100%; text-align: center; background: var(--teal); color: #fff; font: inherit; font-size: 22px; font-weight: 700;
+         padding: 18px; border: 0; border-radius: 16px; cursor: pointer; }
+  .btn:disabled { opacity: .45; }
+  input[type=file] { display: none; }
+  #name { margin: 14px 0 6px; font-weight: 600; word-break: break-all; }
+  textarea { width: 100%; min-height: 200px; padding: 10px; border: 1px solid var(--line); border-radius: 10px;
+             background: var(--field); color: var(--text); font-family: inherit; font-size: 15px; line-height: 1.5; resize: vertical; }
+  #found { font-size: 14px; color: var(--sub); margin: 4px 0 16px; }
+  #msg { margin-top: 16px; padding: 14px; border-radius: 12px; background: var(--bar); display: none; }
+  #msg.bad { color: var(--bad); }
+  code { font-size: 15px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>mp3에 곡 목록 넣기</h1>
+  <p>여러 곡이 든 mp3에 <b>곡 목록</b>을 넣어 <b>파일 하나</b>로 저장해요.
+  VITA 시계로 보내면 시간에 맞춰 곡 제목이 나와요. 다른 음악 앱에서도 그대로 재생돼요.
+  파일은 인터넷으로 올라가지 않고 이 휴대폰(PC) 안에서만 만들어져요.</p>
+  <label class="btn">🎵 mp3 고르기<input id="file" type="file"></label>
+  <div id="name"></div>
+  <textarea id="box" placeholder="곡 목록 붙여넣기&#10;00:00 첫 번째 곡&#10;04:12 두 번째 곡&#10;1:02:30 세 번째 곡&#10;&#10;(첫 줄에 MP3: 전체 제목, URL: 출처 주소도 넣을 수 있어요)"></textarea>
+  <div id="found"></div>
+  <button id="save" class="btn" disabled>곡 목록 넣어 저장하기</button>
+  <div id="msg"></div>
+</main>
+<script>
+/* ---------------------------------------------------------------- ID3 chapters
+   (copied from send.html) The song list goes into the mp3's own tag (ID3v2.4): the title
+   (TIT2), the source address (WXXX) and one chapter (CHAP + TIT2) per song, with a table of
+   contents (CTOC). The tag already in the file is kept (its old chapters replaced); the sound
+   after it is not touched, so the file still plays everywhere. */
+const ID3 = (() => {
+  const enc = new TextEncoder();
+  const u8 = (...a) => new Uint8Array(a);
+  const be32 = n => u8(n >>> 24 & 255, n >>> 16 & 255, n >>> 8 & 255, n & 255);
+  const safe = n => u8(n >>> 21 & 127, n >>> 14 & 127, n >>> 7 & 127, n & 127);
+  const cat = parts => { const len = parts.reduce((s, p) => s + p.length, 0), out = new Uint8Array(len); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } return out; };
+  const frame = (id, body) => cat([enc.encode(id), safe(body.length), u8(0, 0), body]);
+  const textFrame = (id, s) => frame(id, cat([u8(3), enc.encode(s)]));                       // UTF-8
+  const latin = s => Uint8Array.from(s, c => c.charCodeAt(0) & 255);
+
+  // "04:12 곡", "1:02:03 곡", "[04:12] 곡", "1. 04:12 - 곡", "곡 - 04:12" ...; "MP3:" / "URL:" lines too.
+  function parse(text) {
+    let title = "", url = "";
+    const songs = [];
+    for (let line of String(text || "").split(/\r?\n/)) {
+      line = line.trim();
+      if (!line) continue;
+      let m = /^mp3\s*:\s*(.+)$/i.exec(line); if (m) { title = m[1].trim(); continue; }
+      m = /^url\s*:\s*(\S+)/i.exec(line); if (m) { url = m[1]; continue; }
+      if (/^track\s*:/i.test(line)) continue;
+      m = /^(?:\d{1,3}[.)]\s*)?\[?(\d{1,2}):(\d{2})(?::(\d{2}))?\]?\s*[-–—|:.]*\s*(.+)$/.exec(line);
+      let h, mi, s, name;
+      if (m) { name = m[4]; if (m[3] !== undefined) { h = +m[1]; mi = +m[2]; s = +m[3]; } else { h = 0; mi = +m[1]; s = +m[2]; } }
+      else {
+        m = /^(.+?)\s*[-–—|]?\s*\[?(\d{1,2}):(\d{2})(?::(\d{2}))?\]?$/.exec(line);
+        if (!m) continue;
+        name = m[1]; if (m[4] !== undefined) { h = +m[2]; mi = +m[3]; s = +m[4]; } else { h = 0; mi = +m[2]; s = +m[3]; }
+      }
+      name = name.replace(/^[-–—|:.\s]+|[-–—|\s]+$/g, "").trim();
+      if (name && mi < 60 && s < 60) songs.push({ ms: ((h * 60 + mi) * 60 + s) * 1000, name });
+    }
+    songs.sort((a, b) => a.ms - b.ms);
+    return { title, url, songs };
+  }
+
+  // The tag at the start of the file: where the sound starts, and its frames to keep.
+  async function oldTag(file) {
+    const head = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+    if (head.length < 10 || head[0] !== 73 || head[1] !== 68 || head[2] !== 51) return { end: 0, frames: [] };
+    const ver = head[3], flags = head[5];
+    const size = (head[6] & 127) << 21 | (head[7] & 127) << 14 | (head[8] & 127) << 7 | (head[9] & 127);
+    const end = 10 + size + (ver === 4 && flags & 0x10 ? 10 : 0);
+    const frames = [];
+    if ((ver !== 3 && ver !== 4) || flags & 0x80) return { end, frames };           // old / unsynchronised: dropped
+    const b = new Uint8Array(await file.slice(10, 10 + size).arrayBuffer());
+    let p = 0;
+    if (flags & 0x40) p = ver === 4 ? ((b[0] & 127) << 21 | (b[1] & 127) << 14 | (b[2] & 127) << 7 | (b[3] & 127)) : ((b[0] << 24 | b[1] << 16 | b[2] << 8 | b[3]) + 4);
+    while (p + 10 <= b.length && b[p] !== 0) {
+      const id = String.fromCharCode(b[p], b[p + 1], b[p + 2], b[p + 3]);
+      const n = ver === 4 ? ((b[p + 4] & 127) << 21 | (b[p + 5] & 127) << 14 | (b[p + 6] & 127) << 7 | (b[p + 7] & 127))
+                          : (b[p + 4] << 24 | b[p + 5] << 16 | b[p + 6] << 8 | b[p + 7]) >>> 0;
+      const f2 = b[p + 9];
+      if (n <= 0 || p + 10 + n > b.length) break;
+      const packed = ver === 4 ? (f2 & 0x0F) : (f2 & 0xE0);                           // compressed / encrypted / unsynchronised / length prefix
+      if (!packed && !/^(CHAP|CTOC)$/.test(id)) frames.push({ id, body: b.subarray(p + 10, p + 10 + n) });
+      p += 10 + n;
+    }
+    return { end, frames };
+  }
+
+  function duration(file) {
+    return new Promise(res => {
+      const a = document.createElement("audio"), url = URL.createObjectURL(file);
+      const done = v => { URL.revokeObjectURL(url); res(v); };
+      a.preload = "metadata";
+      a.onloadedmetadata = () => done(isFinite(a.duration) ? Math.round(a.duration * 1000) : 0);
+      a.onerror = () => done(0);
+      setTimeout(() => done(0), 8000);
+      a.src = url;
+    });
+  }
+
+  // A Blob: the new tag, then the file's sound as it was.
+  async function build(file, list) {
+    const old = await oldTag(file);
+    const keep = old.frames.filter(f => !(list.title && f.id === "TIT2") && !(list.url && /^(WXXX|WOAS)$/.test(f.id)));
+    const parts = keep.map(f => frame(f.id, f.body));
+    if (list.title) parts.push(textFrame("TIT2", list.title));
+    if (list.url) parts.push(frame("WXXX", cat([u8(0, 0), latin(encodeURI(list.url))])));
+    const songs = list.songs;
+    if (songs.length) {
+      const total = (await duration(file)) || songs[songs.length - 1].ms + 1000;
+      const ids = songs.map((_, i) => "chp" + i);
+      parts.push(frame("CTOC", cat([enc.encode("toc"), u8(0, 3, songs.length), ...ids.map(id => cat([enc.encode(id), u8(0)]))])));
+      songs.forEach((s, i) => {
+        const end = i + 1 < songs.length ? songs[i + 1].ms : Math.max(total, s.ms + 1000);
+        parts.push(frame("CHAP", cat([enc.encode(ids[i]), u8(0), be32(s.ms), be32(end), be32(0xFFFFFFFF), be32(0xFFFFFFFF), textFrame("TIT2", s.name)])));
+      });
+    }
+    const body = cat(parts);
+    const head = cat([enc.encode("ID3"), u8(4, 0, 0), safe(body.length)]);
+    return new Blob([head, body, file.slice(old.end)], { type: "audio/mpeg" });
+  }
+
+  return { parse, build };
+})();
+
+const box = document.getElementById("box"), found = document.getElementById("found");
+const save = document.getElementById("save"), msg = document.getElementById("msg"), nameEl = document.getElementById("name");
+let file = null;
+
+function update() {
+  const p = ID3.parse(box.value);
+  found.textContent = box.value.trim() ? (p.songs.length ? "곡 " + p.songs.length + "개를 찾았어요 ✓" : "\"04:12 곡 제목\" 모양의 줄을 찾지 못했어요") : "";
+  save.disabled = !file || !(p.songs.length || p.title || p.url);
+}
+box.addEventListener("input", update);
+
+document.getElementById("file").addEventListener("change", e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  msg.style.display = "none";
+  if (!f) return;
+  if (!/\.mp3$/i.test(f.name)) { file = null; nameEl.textContent = ""; show("mp3 파일을 골라 주세요", true); update(); return; }
+  file = f;
+  nameEl.textContent = "🎵 " + f.name;
+  update();
+});
+
+save.addEventListener("click", async () => {
+  save.disabled = true;
+  try {
+    const p = ID3.parse(box.value);
+    const blob = await ID3.build(file, p);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = file.name;                            // same name: replaces nothing, saved as a new download
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    show("저장했어요 (곡 " + p.songs.length + "개). 다운로드 폴더의 " + file.name + " 를 시계로 보내 주세요.", false);
+  } catch (e) {
+    show("만들지 못했어요: " + e, true);
+  }
+  save.disabled = false;
+});
+
+function show(text, bad) { msg.textContent = text; msg.className = bad ? "bad" : ""; msg.style.display = "block"; }
+</script>
+</body>
+</html>
