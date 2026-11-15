@@ -8,7 +8,8 @@
 <!--
   VITA watch app: hands the user's Gemini API key from the phone to the watch.
   The watch opens this page on the phone as  key.html?t=<topic>#<secret>
-   - topic : one-time ntfy.sh topic the watch is listening on
+   - topic : this watch's ntfy.sh topic (kept, so the address stays the same); the watch
+             listens on it only while waiting for a key
    - secret: AES-256 key (base64url). After "#", so it never leaves the phone.
   The API key is encrypted here (AES-GCM) and sent through ntfy.sh without being stored
   (cache=no); the watch decrypts it, checks it with Gemini, and answers on <topic>r.
