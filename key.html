@@ -71,6 +71,22 @@
 </main>
 
 <script>
+/* One tab: each time the watch opens this page the phone browser makes a new tab. The newest
+   tab takes over and the older ones close themselves (a browser lets a page close a tab an app
+   opened, while it has no other pages in it). */
+(() => {
+  const KEY = "vita-tab-key";
+  const me = Date.now() + "-" + Math.random();
+  try { localStorage.setItem(KEY, me); } catch (_) { return; }
+  const bye = () => {
+    let last = null;
+    try { last = localStorage.getItem(KEY); } catch (_) {}
+    if (last && last !== me) window.close();
+  };
+  addEventListener("storage", (e) => { if (e.key === KEY) bye(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) bye(); });
+})();
+
 (() => {
   const RELAY = "https://ntfy.sh/";
   const params = new URLSearchParams(location.search);
